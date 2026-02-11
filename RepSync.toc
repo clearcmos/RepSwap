@@ -1,8 +1,8 @@
 ## Interface: 20505
-## Title: RepSwitcher
+## Title: RepSync
 ## Notes: Automatically switches watched reputation when entering dungeons and raids
 ## Author: clearcmos
 ## Version: 1.0.0
-## SavedVariablesPerCharacter: RepSwitcherDB
+## SavedVariablesPerCharacter: RepSyncDB
 
-RepSwitcher.lua
+RepSync.lua

@@ -1,4 +1,4 @@
-package-as: RepSwitcher
+package-as: RepSync
 
 manual-changelog:
   filename: CHANGELOG.md

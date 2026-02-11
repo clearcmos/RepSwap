@@ -1,4 +1,4 @@
--- RepSwitcher: Auto-switch watched reputation when entering dungeons/raids
+-- RepSync: Auto-switch watched reputation when entering dungeons/raids
 -- For WoW Classic Anniversary Edition (2.5.5)
 
 local addonName, addon = ...;
@@ -36,7 +36,7 @@ local UnitFactionGroup = UnitFactionGroup;
 local GetTime = GetTime;
 
 local ADDON_COLOR = "|cff8080ff";
-local ADDON_PREFIX = ADDON_COLOR .. "RepSwitcher|r: ";
+local ADDON_PREFIX = ADDON_COLOR .. "RepSync|r: ";
 
 --------------------------------------------------------------------------------
 -- Instance → Faction Mapping
@@ -306,15 +306,15 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         local loaded = ...;
         if loaded ~= addonName then return; end
 
-        if not RepSwitcherDB then
-            RepSwitcherDB = {};
+        if not RepSyncDB then
+            RepSyncDB = {};
         end
         for k, v in pairs(DEFAULT_SETTINGS) do
-            if RepSwitcherDB[k] == nil then
-                RepSwitcherDB[k] = v;
+            if RepSyncDB[k] == nil then
+                RepSyncDB[k] = v;
             end
         end
-        db = RepSwitcherDB;
+        db = RepSyncDB;
 
         self:UnregisterEvent("ADDON_LOADED");
 
@@ -381,7 +381,7 @@ end
 local function CreateOptionsFrame()
     if OptionsFrame then return OptionsFrame; end
 
-    local frame = CreateFrame("Frame", "RepSwitcherOptionsFrame", UIParent, "BackdropTemplate");
+    local frame = CreateFrame("Frame", "RepSyncOptionsFrame", UIParent, "BackdropTemplate");
     frame:SetSize(280, 160);
     frame:SetPoint("CENTER");
     frame:SetBackdrop(FrameBackdrop);
@@ -402,7 +402,7 @@ local function CreateOptionsFrame()
 
     local titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal");
     titleText:SetPoint("TOP", titleBg, "TOP", 0, -14);
-    titleText:SetText("RepSwitcher");
+    titleText:SetText("RepSync");
 
     local titleBgL = frame:CreateTexture(nil, "OVERLAY");
     titleBgL:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header");
@@ -468,7 +468,7 @@ local function CreateOptionsFrame()
     end;
 
     -- ESC to close
-    tinsert(UISpecialFrames, "RepSwitcherOptionsFrame");
+    tinsert(UISpecialFrames, "RepSyncOptionsFrame");
 
     OptionsFrame = frame;
     return frame;
@@ -552,6 +552,6 @@ local function SlashHandler(msg)
     end
 end
 
-SLASH_REPSWITCHER1 = "/repswitcher";
-SLASH_REPSWITCHER2 = "/rs";
-SlashCmdList["REPSWITCHER"] = SlashHandler;
+SLASH_REPSYNC1 = "/repsync";
+SLASH_REPSYNC2 = "/rs";
+SlashCmdList["REPSYNC"] = SlashHandler;

@@ -1,14 +1,14 @@
-# RepSwitcher - Development Guide
+# RepSync - Development Guide
 
 ## Project Overview
 
-**RepSwitcher** is a WoW Classic Anniversary addon that automatically switches the player's watched reputation bar when entering dungeons and raids associated with specific factions.
+**RepSync** is a WoW Classic Anniversary addon that automatically switches the player's watched reputation bar when entering dungeons and raids associated with specific factions.
 
 ### Key Files
-- `RepSwitcher.lua` - Main addon code (all logic in single file)
-- `RepSwitcher.toc` - Addon manifest
+- `RepSync.lua` - Main addon code (all logic in single file)
+- `RepSync.toc` - Addon manifest
 - `README.md` - Documentation (also used for CurseForge description)
-- Deployed to: `/mnt/data/games/World of Warcraft/_anniversary_/Interface/AddOns/RepSwitcher/`
+- Deployed to: `/mnt/data/games/World of Warcraft/_anniversary_/Interface/AddOns/RepSync/`
 
 ### Features
 - Auto-detects instance entry via `GetInstanceInfo()`
@@ -18,7 +18,7 @@
 - Expand/collapse-safe faction index lookup (expands headers, finds faction, re-collapses)
 - Debounce logic to avoid redundant switches
 - GUI options panel (`/rs`) with two toggle checkboxes
-- SavedVariables: `RepSwitcherDB` (per-character)
+- SavedVariables: `RepSyncDB` (per-character)
 
 ### Architecture
 - Single Lua file with no XML dependencies

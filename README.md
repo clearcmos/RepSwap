@@ -1,6 +1,6 @@
-# RepSwitcher
+# RepSync
 
-**RepSwitcher** automatically switches your watched reputation bar when entering dungeons and raids associated with specific factions.
+**RepSync** automatically switches your watched reputation bar when entering dungeons and raids associated with specific factions.
 
 Built specifically for **TBC Classic Anniversary**.
 
@@ -81,4 +81,4 @@ MIT License - Open source and free to use.
 
 ## Feedback & Issues
 
-Found a bug or have a suggestion? Post a comment / message me on CurseForge, or open an issue on GitHub: https://github.com/clearcmos/RepSwitcher
+Found a bug or have a suggestion? Post a comment / message me on CurseForge, or open an issue on GitHub: https://github.com/clearcmos/RepSync
