@@ -17,6 +17,7 @@
 - Saves and restores previously watched reputation on instance exit
 - Expand/collapse-safe faction index lookup (expands headers, finds faction, re-collapses)
 - Debounce logic to avoid redundant switches
+- GUI options panel (`/rs`) with checkboxes, status display, and scrollable instance list
 - SavedVariables: `RepSwitcherDB` (per-character)
 
 ### Architecture
@@ -27,13 +28,10 @@
 - `C_Reputation.GetWatchedFactionData()` to check current watched faction
 
 ### Slash Commands
-- `/rs` - Show status
-- `/rs on|off` - Enable/disable
-- `/rs restore on|off` - Toggle restore-previous behavior
-- `/rs verbose on|off` - Toggle chat messages
+- `/rs` - Toggle GUI options window
 - `/rs check` - Manually trigger zone check
 - `/rs clear` - Clear saved previous faction
-- `/rs list` - List all mapped instances
+- `/rs list` - List all mapped instances in chat
 - `/rs help` - Show commands
 
 ### Development Workflow

@@ -8,5 +8,6 @@
 - Automatic restoration of previous reputation on instance exit
 - TBC dungeon and raid mappings (Hellfire Citadel, Coilfang Reservoir, Auchindoun, Tempest Keep, Caverns of Time, Magister's Terrace, Karazhan, Hyjal Summit, Black Temple)
 - Vanilla dungeon and raid mappings (Stratholme, Scholomance, BRD, Dire Maul, Molten Core, AQ20, AQ40, ZG, Naxxramas)
+- GUI options panel with settings, live status, and scrollable instance list
 - Slash commands: `/rs`, `/repswitcher`
 - Per-character saved variables

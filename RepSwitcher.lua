@@ -19,9 +19,12 @@ local DEFAULT_SETTINGS = {
 --------------------------------------------------------------------------------
 
 local pairs = pairs;
+local ipairs = ipairs;
 local format = string.format;
 local strlower = string.lower;
 local strtrim = strtrim;
+local tinsert = table.insert;
+local floor = math.floor;
 local GetNumFactions = GetNumFactions;
 local GetFactionInfo = GetFactionInfo;
 local ExpandFactionHeader = ExpandFactionHeader;
@@ -98,6 +101,7 @@ local playerFaction;       -- "Alliance" or "Horde"
 local lastProcessedTime = 0;
 local lastProcessedInstance = nil;
 local DEBOUNCE_INTERVAL = 2;
+local OptionsFrame;
 
 local eventFrame = CreateFrame("Frame");
 
@@ -165,8 +169,7 @@ local function FindAndWatchFactionByID(targetFactionID)
     if not targetFactionID then return false; end
 
     -- Phase 1: Record and expand all collapsed headers
-    -- Iterate backward because expanding changes indices above the expanded point
-    local collapsedHeaders = {};  -- names of headers we expanded
+    local collapsedHeaders = {};
 
     local expanded = true;
     while expanded do
@@ -178,12 +181,12 @@ local function FindAndWatchFactionByID(targetFactionID)
                 collapsedHeaders[name] = true;
                 ExpandFactionHeader(i);
                 expanded = true;
-                break;  -- indices shifted, restart scan
+                break;
             end
         end
     end
 
-    -- Phase 2: Find the target faction index in the now fully-expanded list
+    -- Phase 2: Find the target faction index
     local targetIndex = nil;
     local numFactions = GetNumFactions();
     for i = 1, numFactions do
@@ -201,7 +204,7 @@ local function FindAndWatchFactionByID(targetFactionID)
         success = true;
     end
 
-    -- Phase 4: Re-collapse headers we expanded (iterate backward)
+    -- Phase 4: Re-collapse headers we expanded
     local recollapsed = true;
     while recollapsed do
         recollapsed = false;
@@ -212,7 +215,7 @@ local function FindAndWatchFactionByID(targetFactionID)
                 CollapseFactionHeader(i);
                 collapsedHeaders[name] = nil;
                 recollapsed = true;
-                break;  -- indices shifted, restart
+                break;
             end
         end
     end
@@ -233,7 +236,7 @@ local function ProcessZoneChange()
         local instanceName = GetInstanceInfo();
         if not instanceName then return; end
 
-        -- Debounce: skip if same instance processed recently
+        -- Debounce
         local now = GetTime();
         if instanceName == lastProcessedInstance and (now - lastProcessedTime) < DEBOUNCE_INTERVAL then
             return;
@@ -242,7 +245,6 @@ local function ProcessZoneChange()
         local targetFactionID = GetFactionIDForInstance(instanceName);
         if not targetFactionID then return; end
 
-        -- Already watching the correct faction?
         local currentFactionID = GetCurrentWatchedFactionID();
         if currentFactionID == targetFactionID then
             lastProcessedInstance = instanceName;
@@ -250,12 +252,10 @@ local function ProcessZoneChange()
             return;
         end
 
-        -- Save current faction before switching
         if db.restorePrevious and currentFactionID then
             db.previousFactionID = currentFactionID;
         end
 
-        -- Switch to instance faction
         if FindAndWatchFactionByID(targetFactionID) then
             local factionName = GetFactionNameByID(targetFactionID) or tostring(targetFactionID);
             Print("Switched to |cffffd200" .. factionName .. "|r for " .. instanceName);
@@ -265,7 +265,6 @@ local function ProcessZoneChange()
         lastProcessedTime = now;
 
     else
-        -- Not in a mapped instance; restore previous if configured
         if db.restorePrevious and db.previousFactionID then
             local previousID = db.previousFactionID;
             db.previousFactionID = nil;
@@ -295,7 +294,6 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         local loaded = ...;
         if loaded ~= addonName then return; end
 
-        -- Initialize SavedVariables
         if not RepSwitcherDB then
             RepSwitcherDB = {};
         end
@@ -310,12 +308,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "PLAYER_LOGIN" then
         playerFaction = UnitFactionGroup("player");
-
-        -- Delay initial check to let reputation data populate
         C_Timer.After(1, ProcessZoneChange);
 
     elseif event == "PLAYER_ENTERING_WORLD" then
-        -- Delay slightly to ensure instance info is available
         C_Timer.After(0.5, ProcessZoneChange);
 
     elseif event == "ZONE_CHANGED_NEW_AREA" then
@@ -324,58 +319,388 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 end);
 
 --------------------------------------------------------------------------------
--- Slash Commands
+-- GUI: Widget Factories (matching MyDruid/HealerMana style)
 --------------------------------------------------------------------------------
 
-local function ShowStatus()
-    PrintAlways("Status:");
-    PrintAlways("  Enabled: " .. (db.enabled and "|cff00ff00yes|r" or "|cffff0000no|r"));
-    PrintAlways("  Restore previous: " .. (db.restorePrevious and "|cff00ff00yes|r" or "|cffff0000no|r"));
-    PrintAlways("  Verbose: " .. (db.verbose and "|cff00ff00yes|r" or "|cffff0000no|r"));
+local FrameBackdrop = {
+    bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 32, edgeSize = 32,
+    insets = { left = 8, right = 8, top = 8, bottom = 8 },
+};
 
-    local currentID = GetCurrentWatchedFactionID();
-    if currentID then
-        local name = GetFactionNameByID(currentID) or tostring(currentID);
-        PrintAlways("  Watching: |cffffd200" .. name .. "|r");
-    else
-        PrintAlways("  Watching: |cff888888none|r");
-    end
+local function CreateCheckbox(parent, label, width)
+    local container = CreateFrame("Frame", nil, parent);
+    container:SetSize(width or 200, 24);
 
-    if db.previousFactionID then
-        local name = GetFactionNameByID(db.previousFactionID) or tostring(db.previousFactionID);
-        PrintAlways("  Saved previous: |cffffd200" .. name .. "|r");
-    end
+    local checkbox = CreateFrame("CheckButton", nil, container, "UICheckButtonTemplate");
+    checkbox:SetPoint("LEFT");
+    checkbox:SetSize(24, 24);
 
-    local inInstance, instanceType = IsInInstance();
-    if inInstance then
-        local instanceName = GetInstanceInfo();
-        local targetID = GetFactionIDForInstance(instanceName);
-        if targetID then
-            local targetName = GetFactionNameByID(targetID) or tostring(targetID);
-            PrintAlways("  Instance: |cffffd200" .. instanceName .. "|r → " .. targetName);
-        else
-            PrintAlways("  Instance: |cffffd200" .. instanceName .. "|r (not mapped)");
+    local labelText = container:CreateFontString(nil, "OVERLAY", "GameFontHighlight");
+    labelText:SetPoint("LEFT", checkbox, "RIGHT", 2, 0);
+    labelText:SetText(label);
+
+    checkbox:SetScript("OnClick", function(self)
+        PlaySound(self:GetChecked() and 856 or 857);
+        if container.OnValueChanged then
+            container:OnValueChanged(self:GetChecked());
         end
+    end);
+
+    container.checkbox = checkbox;
+    container.labelText = labelText;
+
+    function container:SetValue(value)
+        checkbox:SetChecked(value);
+    end
+
+    function container:GetValue()
+        return checkbox:GetChecked();
+    end
+
+    return container;
+end
+
+--------------------------------------------------------------------------------
+-- GUI: Options Frame
+--------------------------------------------------------------------------------
+
+local function CreateOptionsFrame()
+    if OptionsFrame then return OptionsFrame; end
+
+    local frame = CreateFrame("Frame", "RepSwitcherOptionsFrame", UIParent, "BackdropTemplate");
+    frame:SetSize(340, 380);
+    frame:SetPoint("CENTER");
+    frame:SetBackdrop(FrameBackdrop);
+    frame:SetBackdropColor(0, 0, 0, 1);
+    frame:SetMovable(true);
+    frame:EnableMouse(true);
+    frame:SetToplevel(true);
+    frame:SetFrameStrata("DIALOG");
+    frame:SetFrameLevel(100);
+    frame:Hide();
+
+    -- Title bar
+    local titleBg = frame:CreateTexture(nil, "OVERLAY");
+    titleBg:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header");
+    titleBg:SetTexCoord(0.31, 0.67, 0, 0.63);
+    titleBg:SetPoint("TOP", 0, 12);
+    titleBg:SetSize(180, 40);
+
+    local titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal");
+    titleText:SetPoint("TOP", titleBg, "TOP", 0, -14);
+    titleText:SetText("RepSwitcher");
+
+    local titleBgL = frame:CreateTexture(nil, "OVERLAY");
+    titleBgL:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header");
+    titleBgL:SetTexCoord(0.21, 0.31, 0, 0.63);
+    titleBgL:SetPoint("RIGHT", titleBg, "LEFT");
+    titleBgL:SetSize(30, 40);
+
+    local titleBgR = frame:CreateTexture(nil, "OVERLAY");
+    titleBgR:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header");
+    titleBgR:SetTexCoord(0.67, 0.77, 0, 0.63);
+    titleBgR:SetPoint("LEFT", titleBg, "RIGHT");
+    titleBgR:SetSize(30, 40);
+
+    -- Title drag area
+    local titleArea = CreateFrame("Frame", nil, frame);
+    titleArea:SetAllPoints(titleBg);
+    titleArea:EnableMouse(true);
+    titleArea:SetScript("OnMouseDown", function() frame:StartMoving(); end);
+    titleArea:SetScript("OnMouseUp", function() frame:StopMovingOrSizing(); end);
+
+    -- Close button
+    local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton");
+    closeBtn:SetPoint("TOPRIGHT", -5, -5);
+
+    -- Content area
+    local content = CreateFrame("Frame", nil, frame);
+    content:SetPoint("TOPLEFT", 20, -30);
+    content:SetPoint("BOTTOMRIGHT", -20, 50);
+
+    local y = 0;
+
+    --------------------------------
+    -- Settings section
+    --------------------------------
+    local settingsHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge");
+    settingsHeader:SetPoint("TOPLEFT", 0, y);
+    settingsHeader:SetText("Settings");
+    settingsHeader:SetTextColor(1, 0.82, 0);
+    y = y - 24;
+
+    -- Enabled checkbox
+    local enabledCb = CreateCheckbox(content, "Enable auto-switching", 280);
+    enabledCb:SetPoint("TOPLEFT", 0, y);
+    enabledCb:SetValue(db.enabled);
+    enabledCb:EnableMouse(true);
+    enabledCb:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+        GameTooltip:SetText("Enable Auto-Switching", 1, 1, 1);
+        GameTooltip:AddLine("Automatically switch your watched reputation when entering a mapped dungeon or raid.", 1, 0.82, 0, true);
+        GameTooltip:Show();
+    end);
+    enabledCb:SetScript("OnLeave", function() GameTooltip:Hide(); end);
+    enabledCb.OnValueChanged = function(self, value)
+        db.enabled = value;
+    end;
+    y = y - 26;
+
+    -- Restore previous checkbox
+    local restoreCb = CreateCheckbox(content, "Restore previous rep on exit", 280);
+    restoreCb:SetPoint("TOPLEFT", 0, y);
+    restoreCb:SetValue(db.restorePrevious);
+    restoreCb:EnableMouse(true);
+    restoreCb:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+        GameTooltip:SetText("Restore Previous", 1, 1, 1);
+        GameTooltip:AddLine("When leaving a mapped instance, automatically switch back to the reputation you were tracking before.", 1, 0.82, 0, true);
+        GameTooltip:Show();
+    end);
+    restoreCb:SetScript("OnLeave", function() GameTooltip:Hide(); end);
+    restoreCb.OnValueChanged = function(self, value)
+        db.restorePrevious = value;
+    end;
+    y = y - 26;
+
+    -- Verbose checkbox
+    local verboseCb = CreateCheckbox(content, "Show chat notifications", 280);
+    verboseCb:SetPoint("TOPLEFT", 0, y);
+    verboseCb:SetValue(db.verbose);
+    verboseCb:EnableMouse(true);
+    verboseCb:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+        GameTooltip:SetText("Chat Notifications", 1, 1, 1);
+        GameTooltip:AddLine("Print a message to chat when switching or restoring reputation.", 1, 0.82, 0, true);
+        GameTooltip:Show();
+    end);
+    verboseCb:SetScript("OnLeave", function() GameTooltip:Hide(); end);
+    verboseCb.OnValueChanged = function(self, value)
+        db.verbose = value;
+    end;
+    y = y - 30;
+
+    --------------------------------
+    -- Status section
+    --------------------------------
+    local statusHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge");
+    statusHeader:SetPoint("TOPLEFT", 0, y);
+    statusHeader:SetText("Status");
+    statusHeader:SetTextColor(1, 0.82, 0);
+    y = y - 20;
+
+    local watchingLabel = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight");
+    watchingLabel:SetPoint("TOPLEFT", 4, y);
+    watchingLabel:SetJustifyH("LEFT");
+    watchingLabel:SetWidth(280);
+    y = y - 16;
+
+    local savedLabel = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight");
+    savedLabel:SetPoint("TOPLEFT", 4, y);
+    savedLabel:SetJustifyH("LEFT");
+    savedLabel:SetWidth(280);
+    y = y - 16;
+
+    local instanceLabel = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight");
+    instanceLabel:SetPoint("TOPLEFT", 4, y);
+    instanceLabel:SetJustifyH("LEFT");
+    instanceLabel:SetWidth(280);
+    y = y - 24;
+
+    local function UpdateStatus()
+        -- Watching
+        local currentID = GetCurrentWatchedFactionID();
+        if currentID then
+            local name = GetFactionNameByID(currentID) or tostring(currentID);
+            watchingLabel:SetText("Watching: |cffffd200" .. name .. "|r");
+        else
+            watchingLabel:SetText("Watching: |cff888888none|r");
+        end
+
+        -- Saved previous
+        if db.previousFactionID then
+            local name = GetFactionNameByID(db.previousFactionID) or tostring(db.previousFactionID);
+            savedLabel:SetText("Saved previous: |cffffd200" .. name .. "|r");
+        else
+            savedLabel:SetText("Saved previous: |cff888888none|r");
+        end
+
+        -- Instance
+        local inInstance, instanceType = IsInInstance();
+        if inInstance then
+            local instanceName = GetInstanceInfo();
+            local targetID = GetFactionIDForInstance(instanceName);
+            if targetID then
+                local targetName = GetFactionNameByID(targetID) or tostring(targetID);
+                instanceLabel:SetText("Instance: |cffffd200" .. instanceName .. "|r");
+            else
+                instanceLabel:SetText("Instance: |cffffd200" .. instanceName .. "|r (unmapped)");
+            end
+        else
+            instanceLabel:SetText("Instance: |cff888888not in one|r");
+        end
+    end
+
+    --------------------------------
+    -- Action buttons
+    --------------------------------
+    local checkBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate");
+    checkBtn:SetSize(130, 22);
+    checkBtn:SetPoint("TOPLEFT", 0, y);
+    checkBtn:SetText("Check Zone Now");
+    checkBtn:SetScript("OnClick", function()
+        ProcessZoneChange();
+        UpdateStatus();
+    end);
+
+    local clearBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate");
+    clearBtn:SetSize(130, 22);
+    clearBtn:SetPoint("TOPLEFT", 140, y);
+    clearBtn:SetText("Clear Saved Rep");
+    clearBtn:SetScript("OnClick", function()
+        db.previousFactionID = nil;
+        PrintAlways("Cleared saved previous faction");
+        UpdateStatus();
+    end);
+    y = y - 34;
+
+    --------------------------------
+    -- Instance list section
+    --------------------------------
+    local listHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge");
+    listHeader:SetPoint("TOPLEFT", 0, y);
+    listHeader:SetText("Mapped Instances");
+    listHeader:SetTextColor(1, 0.82, 0);
+    y = y - 4;
+
+    -- Scrollable instance list
+    local listFrame = CreateFrame("Frame", nil, content, "BackdropTemplate");
+    listFrame:SetPoint("TOPLEFT", 0, y);
+    listFrame:SetPoint("RIGHT", content, "RIGHT", 0, 0);
+    listFrame:SetHeight(130);
+    listFrame:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    });
+    listFrame:SetBackdropColor(0.05, 0.05, 0.05, 0.8);
+    listFrame:SetBackdropBorderColor(0.4, 0.4, 0.4);
+
+    local scrollFrame = CreateFrame("ScrollFrame", "RepSwitcherListScroll", listFrame, "FauxScrollFrameTemplate");
+    scrollFrame:SetPoint("TOPLEFT", 4, -4);
+    scrollFrame:SetPoint("BOTTOMRIGHT", -22, 4);
+
+    local ROW_HEIGHT = 14;
+    local VISIBLE_ROWS = 9;
+    local listRows = {};
+    local sortedInstances = {};
+
+    for i = 1, VISIBLE_ROWS do
+        local row = CreateFrame("Frame", nil, listFrame);
+        row:SetSize(1, ROW_HEIGHT);
+        row:SetPoint("TOPLEFT", scrollFrame, "TOPLEFT", 0, -(i - 1) * ROW_HEIGHT);
+        row:SetPoint("RIGHT", scrollFrame, "RIGHT", 0, 0);
+
+        row.instanceText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall");
+        row.instanceText:SetPoint("LEFT", 2, 0);
+        row.instanceText:SetJustifyH("LEFT");
+        row.instanceText:SetWidth(150);
+
+        row.factionText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall");
+        row.factionText:SetPoint("LEFT", 158, 0);
+        row.factionText:SetJustifyH("LEFT");
+
+        listRows[i] = row;
+    end
+
+    local function BuildInstanceList()
+        table.wipe(sortedInstances);
+        for instanceName, entry in pairs(INSTANCE_FACTION_MAP) do
+            local factionID;
+            if entry.faction then
+                factionID = entry.faction;
+            elseif playerFaction == "Alliance" then
+                factionID = entry.alliance;
+            else
+                factionID = entry.horde;
+            end
+            local factionName = GetFactionNameByID(factionID) or tostring(factionID);
+            tinsert(sortedInstances, { instance = instanceName, faction = factionName });
+        end
+        table.sort(sortedInstances, function(a, b) return a.instance < b.instance; end);
+    end
+
+    local function UpdateList()
+        local offset = FauxScrollFrame_GetOffset(scrollFrame);
+        FauxScrollFrame_Update(scrollFrame, #sortedInstances, VISIBLE_ROWS, ROW_HEIGHT);
+        for i = 1, VISIBLE_ROWS do
+            local row = listRows[i];
+            local idx = offset + i;
+            if idx <= #sortedInstances then
+                local e = sortedInstances[idx];
+                row.instanceText:SetText(e.instance);
+                row.factionText:SetText("|cffaaaaaa" .. e.faction .. "|r");
+                row:Show();
+            else
+                row:Hide();
+            end
+        end
+    end
+
+    scrollFrame:SetScript("OnVerticalScroll", function(self, offset)
+        FauxScrollFrame_OnVerticalScroll(self, offset, ROW_HEIGHT, UpdateList);
+    end);
+
+    -- Update status and list on show
+    frame:SetScript("OnShow", function()
+        UpdateStatus();
+        BuildInstanceList();
+        UpdateList();
+    end);
+
+    -- Bottom close button
+    local closeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate");
+    closeButton:SetSize(100, 22);
+    closeButton:SetPoint("BOTTOM", 0, 15);
+    closeButton:SetText("Close");
+    closeButton:SetScript("OnClick", function()
+        frame:Hide();
+    end);
+
+    -- ESC to close
+    tinsert(UISpecialFrames, "RepSwitcherOptionsFrame");
+
+    OptionsFrame = frame;
+    return frame;
+end
+
+local function ToggleOptionsFrame()
+    local frame = CreateOptionsFrame();
+    if frame:IsShown() then
+        frame:Hide();
     else
-        PrintAlways("  Instance: not in one");
+        frame:Show();
     end
 end
 
+--------------------------------------------------------------------------------
+-- Slash Commands
+--------------------------------------------------------------------------------
+
 local function ShowHelp()
     PrintAlways("Commands:");
-    PrintAlways("  |cffffd200/rs|r - Show status");
-    PrintAlways("  |cffffd200/rs on|off|r - Enable/disable");
-    PrintAlways("  |cffffd200/rs restore on|off|r - Toggle restore previous");
-    PrintAlways("  |cffffd200/rs verbose on|off|r - Toggle chat messages");
+    PrintAlways("  |cffffd200/rs|r - Toggle options window");
     PrintAlways("  |cffffd200/rs check|r - Manually trigger zone check");
     PrintAlways("  |cffffd200/rs clear|r - Clear saved previous faction");
-    PrintAlways("  |cffffd200/rs list|r - List all mapped instances");
+    PrintAlways("  |cffffd200/rs list|r - List all mapped instances in chat");
     PrintAlways("  |cffffd200/rs help|r - Show this help");
 end
 
 local function ShowList()
     PrintAlways("Mapped instances:");
-    -- Build sorted list
     local entries = {};
     for instanceName, entry in pairs(INSTANCE_FACTION_MAP) do
         local factionID;
@@ -392,7 +717,7 @@ local function ShowList()
     table.sort(entries, function(a, b) return a.instance < b.instance; end);
 
     for _, e in ipairs(entries) do
-        PrintAlways("  |cffffd200" .. e.instance .. "|r → " .. e.faction);
+        PrintAlways("  |cffffd200" .. e.instance .. "|r -> " .. e.faction);
     end
 end
 
@@ -400,41 +725,14 @@ local function SlashHandler(msg)
     if not db then return; end
 
     msg = strtrim(msg or "");
-    local cmd, arg1 = msg:match("^(%S+)%s*(.*)$");
-    cmd = cmd and strlower(cmd) or "";
-    arg1 = arg1 and strtrim(strlower(arg1)) or "";
+    local cmd = msg:match("^(%S+)") or "";
+    cmd = strlower(cmd);
 
     if cmd == "" then
-        ShowStatus();
-    elseif cmd == "on" then
-        db.enabled = true;
-        PrintAlways("Enabled");
-    elseif cmd == "off" then
-        db.enabled = false;
-        PrintAlways("Disabled");
-    elseif cmd == "restore" then
-        if arg1 == "on" then
-            db.restorePrevious = true;
-            PrintAlways("Restore previous: |cff00ff00on|r");
-        elseif arg1 == "off" then
-            db.restorePrevious = false;
-            PrintAlways("Restore previous: |cffff0000off|r");
-        else
-            PrintAlways("Usage: /rs restore on|off");
-        end
-    elseif cmd == "verbose" then
-        if arg1 == "on" then
-            db.verbose = true;
-            PrintAlways("Verbose: |cff00ff00on|r");
-        elseif arg1 == "off" then
-            db.verbose = false;
-            PrintAlways("Verbose: |cffff0000off|r");
-        else
-            PrintAlways("Usage: /rs verbose on|off");
-        end
+        ToggleOptionsFrame();
     elseif cmd == "check" then
-        PrintAlways("Checking zone...");
         ProcessZoneChange();
+        PrintAlways("Zone check complete.");
     elseif cmd == "clear" then
         db.previousFactionID = nil;
         PrintAlways("Cleared saved previous faction");

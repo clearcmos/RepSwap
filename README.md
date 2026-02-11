@@ -48,13 +48,10 @@ RepSwitcher detects when you enter a mapped instance and automatically switches 
 
 ## Commands
 
-- `/rs` - Show current status
-- `/rs on` / `/rs off` - Enable or disable
-- `/rs restore on` / `/rs restore off` - Toggle automatic restoration of previous rep on exit
-- `/rs verbose on` / `/rs verbose off` - Toggle chat notifications
+- `/rs` - Open the options window
 - `/rs check` - Manually trigger a zone check
 - `/rs clear` - Clear the saved previous faction
-- `/rs list` - Show all mapped instances and their factions
+- `/rs list` - Show all mapped instances in chat
 - `/rs help` - Show command help
 
 ## How It Works
@@ -71,7 +68,7 @@ RepSwitcher detects when you enter a mapped instance and automatically switches 
 
 ## Settings
 
-All settings are per-character and persist across sessions:
-- **enabled** - Whether auto-switching is active (default: on)
-- **restorePrevious** - Whether to restore previous rep on instance exit (default: on)
-- **verbose** - Whether to show chat messages on switch (default: on)
+All settings are configurable via the GUI (`/rs`) and persist per-character:
+- **Enable auto-switching** - Whether auto-switching is active (default: on)
+- **Restore previous rep on exit** - Whether to restore previous rep on instance exit (default: on)
+- **Show chat notifications** - Whether to show chat messages on switch (default: on)
