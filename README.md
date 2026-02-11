@@ -11,7 +11,7 @@ Built for **TBC Classic Anniversary**.
 - **Auto-switch** - Switches your reputation bar to the correct faction when entering a mapped instance
 - **Auto-restore** - Switches back to your previous reputation when you leave
 - **Faction-aware** - Handles Alliance/Horde split reps (Honor Hold vs Thrallmar)
-- **GUI options** - Configure settings, view status, and browse mapped instances via `/rs`
+- **GUI options** - Toggle settings via `/rs`
 
 ---
 
