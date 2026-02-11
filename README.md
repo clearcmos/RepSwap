@@ -1,14 +1,33 @@
 # RepSwitcher
 
-Automatically switches your watched reputation bar when entering dungeons and raids in WoW Classic Anniversary Edition.
+Automatically tracks the right reputation when entering dungeons and raids.
 
-## The Problem
+Built for **TBC Classic Anniversary**.
 
-When running TBC and Vanilla dungeons/raids, you want to track the associated faction's reputation. But it's easy to forget to switch, especially when bouncing between different instances.
+---
 
-## The Solution
+## Features
 
-RepSwitcher detects when you enter a mapped instance and automatically switches your watched reputation to the correct faction. When you leave, it restores your previous reputation.
+- **Auto-switch** - Switches your reputation bar to the correct faction when entering a mapped instance
+- **Auto-restore** - Switches back to your previous reputation when you leave
+- **Faction-aware** - Handles Alliance/Horde split reps (Honor Hold vs Thrallmar)
+- **GUI options** - Configure settings, view status, and browse mapped instances via `/rs`
+
+---
+
+## Usage
+
+Type `/rs` to open the options panel.
+
+### Slash Commands
+
+- `/rs` - Open options panel
+- `/rs check` - Manually trigger zone check
+- `/rs clear` - Clear saved previous faction
+- `/rs list` - List mapped instances in chat
+- `/rs help` - Show commands
+
+---
 
 ## Supported Instances
 
@@ -46,29 +65,14 @@ RepSwitcher detects when you enter a mapped instance and automatically switches 
 | Zul'Gurub | Zandalar Tribe |
 | Naxxramas | Argent Dawn |
 
-## Commands
+---
 
-- `/rs` - Open the options window
-- `/rs check` - Manually trigger a zone check
-- `/rs clear` - Clear the saved previous faction
-- `/rs list` - Show all mapped instances in chat
-- `/rs help` - Show command help
+## License
 
-## How It Works
+MIT License - Open source and free to use.
 
-1. When you enter a mapped instance, RepSwitcher saves your currently watched faction and switches to the instance's associated reputation.
-2. For faction-specific reputations (e.g., Hellfire Citadel dungeons), it automatically picks the correct one for your character (Honor Hold for Alliance, Thrallmar for Horde).
-3. When you leave the instance, it restores your previously watched faction.
+---
 
-## Installation
+## Feedback & Issues
 
-1. Download and extract to `Interface/AddOns/RepSwitcher/`
-2. Restart WoW or `/reload`
-3. That's it - RepSwitcher is enabled by default
-
-## Settings
-
-All settings are configurable via the GUI (`/rs`) and persist per-character:
-- **Enable auto-switching** - Whether auto-switching is active (default: on)
-- **Restore previous rep on exit** - Whether to restore previous rep on instance exit (default: on)
-- **Show chat notifications** - Whether to show chat messages on switch (default: on)
+Found a bug or have a suggestion? Open an issue on GitHub.
