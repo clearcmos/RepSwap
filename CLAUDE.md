@@ -17,19 +17,18 @@
 - Saves and restores previously watched reputation on instance exit
 - Expand/collapse-safe faction index lookup (expands headers, finds faction, re-collapses)
 - Debounce logic to avoid redundant switches
-- GUI options panel (`/rs`) with checkboxes, status display, and scrollable instance list
+- GUI options panel (`/rs`) with two toggle checkboxes
 - SavedVariables: `RepSwitcherDB` (per-character)
 
 ### Architecture
 - Single Lua file with no XML dependencies
 - Event-driven: PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA
 - `FindAndWatchFactionByID()` handles the expand-all → find → set → re-collapse dance
-- `INSTANCE_FACTION_MAP` flat table keyed by `GetInstanceInfo()` name
+- `INSTANCE_FACTION_MAP` flat table keyed by instanceID (8th return of `GetInstanceInfo()`)
 - `C_Reputation.GetWatchedFactionData()` to check current watched faction
 
 ### Slash Commands
 - `/rs` - Toggle GUI options window
-- `/rs check` - Manually trigger zone check
 - `/rs clear` - Clear saved previous faction
 - `/rs list` - List all mapped instances in chat
 - `/rs help` - Show commands
