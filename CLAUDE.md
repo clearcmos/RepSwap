@@ -2,40 +2,51 @@
 
 ## Project Overview
 
-**RepSync** is a WoW Classic Anniversary addon that automatically switches the player's watched reputation bar when entering dungeons and raids associated with specific factions.
+**RepSync** is a WoW Classic Anniversary addon that automatically switches the player's watched reputation bar when entering dungeons, raids, capital cities, and faction sub-zones.
 
 ### Key Files
-- `RepSync.lua` - Main addon code (all logic in single file)
+- `RepSync.lua` - Main addon code (all logic in single file, ~700 lines)
 - `RepSync.toc` - Addon manifest
 - `README.md` - Documentation (also used for CurseForge description)
 - Deployed to: `/mnt/data/games/World of Warcraft/_anniversary_/Interface/AddOns/RepSync/`
 
 ### Features
 - Auto-detects instance entry via `GetInstanceInfo()`
-- Maps instances to their associated reputation faction
-- Handles faction-specific reps (Honor Hold vs Thrallmar) via `UnitFactionGroup()`
-- Saves and restores previously watched reputation on instance exit
+- Auto-detects capital cities via `C_Map.GetBestMapForUnit("player")` (numeric uiMapIDs, locale-independent)
+- Auto-detects faction sub-zones via `GetSubZoneText()` with full localization (10 WoW client languages)
+- Maps instances, cities, and sub-zones to their associated reputation faction
+- Handles faction-specific reps (Honor Hold vs Thrallmar, Kurenai vs Mag'har) via `UnitFactionGroup()`
+- Saves and restores previously watched reputation on exit (preserves original across multi-zone transitions)
 - Expand/collapse-safe faction index lookup (expands headers, finds faction, re-collapses)
 - Debounce logic to avoid redundant switches
-- GUI options panel (`/rs`) with two toggle checkboxes
+- GUI options panel (`/rs`) with three toggle checkboxes
 - SavedVariables: `RepSyncDB` (per-character)
 
 ### Architecture
 - Single Lua file with no XML dependencies
-- Event-driven: PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA
+- Event-driven: PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA, ZONE_CHANGED
+- Priority system: instances > sub-zones > cities
 - `FindAndWatchFactionByID()` handles the expand-all → find → set → re-collapse dance
+- `GetFactionIDFromEntry()` resolves faction-split entries based on player faction
 - `INSTANCE_FACTION_MAP` flat table keyed by instanceID (8th return of `GetInstanceInfo()`)
+- `CITY_FACTION_MAP` flat table keyed by uiMapID (Classic Anniversary IDs: 1453-1458, 1947, 1954)
+- `SUBZONE_FACTION_MAP` built at load time from `SUBZONE_LOCALE_DATA` (all locale names → factionID)
 - `C_Reputation.GetWatchedFactionData()` to check current watched faction
 
 ### Slash Commands
 - `/rs` - Toggle GUI options window
 - `/rs clear` - Clear saved previous faction
-- `/rs list` - List all mapped instances in chat
+- `/rs list` - List all mapped locations in chat
 - `/rs help` - Show commands
 
 ### Development Workflow
 
 See the `/wow-addon` skill for the standard development workflow (test, version, commit, deploy).
+
+### Important Notes
+- Classic Anniversary uiMapIDs differ from retail (e.g., Stormwind = 1453, not 84)
+- Sub-zone translations sourced from LibBabble-SubZone-3.0
+- Faction-specific sub-zones (Telaar/Garadar) silently fail for the wrong faction
 
 ## WoW API Reference
 

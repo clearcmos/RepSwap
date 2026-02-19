@@ -1,6 +1,6 @@
 # RepSync
 
-**RepSync** automatically switches your reputation bar when entering dungeons and raids associated with specific factions.
+**RepSync** automatically switches your reputation bar when entering dungeons, raids, cities, and faction sub-zones.
 
 Built specifically for **TBC Classic Anniversary**.
 
@@ -8,9 +8,12 @@ Built specifically for **TBC Classic Anniversary**.
 
 ## Features
 
-- **Auto-switch** - Switches your reputation bar to the correct faction when entering a mapped instance
+- **Auto-switch** - Switches your reputation bar to the correct faction when entering a mapped location
 - **Auto-restore** - Switches back to your previous reputation when you leave
-- **Faction-aware** - Handles Alliance/Horde split reps (Honor Hold vs Thrallmar)
+- **Faction-aware** - Handles Alliance/Horde split reps (Honor Hold vs Thrallmar, Kurenai vs Mag'har)
+- **City support** - Switches to city faction rep when entering capital cities
+- **Sub-zone support** - Detects faction sub-zones like Aldor Rise, Scryer's Tier, and goblin towns
+- **Multi-language** - Sub-zone detection works in all 10 WoW client languages
 - **GUI options** - Toggle settings via `/rs`
 
 ---
@@ -23,7 +26,7 @@ Type `/rs` to open the options panel.
 
 - `/rs` - Open options panel
 - `/rs clear` - Clear saved previous faction
-- `/rs list` - List mapped instances in chat
+- `/rs list` - List mapped locations in chat
 - `/rs help` - Show commands
 
 ---
@@ -32,10 +35,41 @@ Type `/rs` to open the options panel.
 
 - Enable/Disable auto-switching
 - Restore previous rep on exit
+- Enable/Disable city & sub-zone switching
 
 ---
 
-## Supported Instances
+## Supported Locations
+
+### Capital Cities
+
+- **Stormwind City** - Stormwind
+- **Ironforge** - Ironforge
+- **Darnassus** - Darnassus
+- **The Exodar** - Exodar
+- **Orgrimmar** - Orgrimmar
+- **Thunder Bluff** - Thunder Bluff
+- **Undercity** - Undercity
+- **Silvermoon City** - Silvermoon City
+
+### Faction Sub-Zones
+
+- **Aldor Rise** - The Aldor
+- **Scryer's Tier** - The Scryers
+- **Tinker Town** - Gnomeregan Exiles
+- **Valley of Spirits** - Darkspear Trolls
+- **Telaar** - Kurenai (Alliance)
+- **Garadar** - The Mag'har (Horde)
+- **Cenarion Hold** - Cenarion Circle
+- **Light's Hope Chapel** - Argent Dawn
+- **Sporeggar** - Sporeggar
+
+### Steamwheedle Cartel Towns
+
+- **Booty Bay** - Booty Bay
+- **Everlook** - Everlook
+- **Gadgetzan** - Gadgetzan
+- **Ratchet** - Ratchet
 
 ### TBC Dungeons
 
@@ -77,4 +111,4 @@ MIT License - Open source and free to use.
 
 ## Feedback & Issues
 
-Found a bug or have a suggestion? Post a comment / message me on CurseForge, or open an issue on GitHub: https://github.com/clearcmos/RepSync
+Found a bug or have a suggestion? Reach me on Discord: `_cmos` or open an issue on GitHub: https://github.com/clearcmos/RepSync
