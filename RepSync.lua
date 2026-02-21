@@ -1,7 +1,7 @@
 -- RepSync: Auto-switch watched reputation in dungeons, raids, and cities
 -- For WoW Classic Anniversary Edition (2.5.5)
 
-local addonName, addon = ...;
+local addonName, _ = ...;
 
 --------------------------------------------------------------------------------
 -- Configuration Defaults
@@ -12,7 +12,11 @@ local DEFAULT_SETTINGS = {
     restorePrevious = true,
     enableCities = true,
     previousFactionID = nil,
+    skipExalted = false,
     verbose = true,
+    showAlert = true,
+    alertOffsetX = 0,
+    alertOffsetY = -220,
 };
 
 --------------------------------------------------------------------------------
@@ -21,7 +25,6 @@ local DEFAULT_SETTINGS = {
 
 local pairs = pairs;
 local ipairs = ipairs;
-local format = string.format;
 local strlower = string.lower;
 local strtrim = strtrim;
 local tinsert = table.insert;
@@ -35,6 +38,7 @@ local GetInstanceInfo = GetInstanceInfo;
 local IsInInstance = IsInInstance;
 local UnitFactionGroup = UnitFactionGroup;
 local GetSubZoneText = GetSubZoneText;
+local GetFactionInfoByID = GetFactionInfoByID;
 local GetTime = GetTime;
 
 local ADDON_COLOR = "|cff8080ff";
@@ -282,9 +286,178 @@ local playerFaction;       -- "Alliance" or "Horde"
 local lastProcessedTime = 0;
 local lastProcessedTarget = nil;
 local DEBOUNCE_INTERVAL = 2;
-local OptionsFrame;
+local repSyncCategoryID;
+local settingsDemoActive = false;
+local RegisterSettings;
 
 local eventFrame = CreateFrame("Frame");
+
+--------------------------------------------------------------------------------
+-- Alert Display (zone-text style fade notification)
+--------------------------------------------------------------------------------
+
+local alertFrame = CreateFrame("Frame", "RepSyncAlertFrame", UIParent);
+alertFrame:SetSize(512, 40);
+alertFrame:SetPoint("TOP", UIParent, "TOP", 0, -220);
+alertFrame:SetFrameStrata("LOW");
+alertFrame:Hide();
+
+local alertText = alertFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge");
+alertText:SetPoint("CENTER");
+alertText:SetFont(alertText:GetFont(), 26, "THICKOUTLINE");
+alertText:SetTextColor(0.5, 0.5, 1.0);
+
+local function UpdateAlertPosition()
+    if not db then return; end
+    alertFrame:ClearAllPoints();
+    alertFrame:SetPoint("TOP", UIParent, "TOP", db.alertOffsetX, db.alertOffsetY);
+end
+
+local alertStartTime = 0;
+local alertDemoMode = false;
+local ALERT_FADE_IN  = 0.5;
+local ALERT_HOLD     = 1.5;
+local ALERT_FADE_OUT = 2.0;
+local ALERT_TOTAL    = ALERT_FADE_IN + ALERT_HOLD + ALERT_FADE_OUT;
+
+alertFrame:SetScript("OnUpdate", function(self)
+    local elapsed = GetTime() - alertStartTime;
+    if alertDemoMode then
+        elapsed = elapsed % ALERT_TOTAL;
+    end
+    if elapsed < ALERT_FADE_IN then
+        self:SetAlpha(elapsed / ALERT_FADE_IN);
+    elseif elapsed < ALERT_FADE_IN + ALERT_HOLD then
+        self:SetAlpha(1.0);
+    elseif elapsed < ALERT_FADE_IN + ALERT_HOLD + ALERT_FADE_OUT then
+        local fadeElapsed = elapsed - ALERT_FADE_IN - ALERT_HOLD;
+        self:SetAlpha(1.0 - fadeElapsed / ALERT_FADE_OUT);
+    else
+        self:Hide();
+    end
+end);
+
+local function ShowAlert(text)
+    alertText:SetText(text);
+    alertStartTime = GetTime();
+    alertDemoMode = false;
+    alertFrame:SetAlpha(0);
+    alertFrame:Show();
+end
+
+-- Draggable preview area (blue highlight, ScrollingLoot style)
+local alertPreview = CreateFrame("Frame", "RepSyncAlertPreview", UIParent);
+alertPreview:SetSize(512, 40);
+alertPreview:SetPoint("TOP", UIParent, "TOP", 0, -220);
+alertPreview:SetFrameStrata("DIALOG");
+alertPreview:SetFrameLevel(50);
+alertPreview:EnableMouse(true);
+alertPreview:SetMovable(true);
+alertPreview:SetClampedToScreen(true);
+alertPreview:Hide();
+
+alertPreview.highlight = alertPreview:CreateTexture(nil, "BACKGROUND");
+alertPreview.highlight:SetAllPoints();
+alertPreview.highlight:SetColorTexture(0.2, 0.5, 0.8, 0.25);
+alertPreview.highlight:Hide();
+
+alertPreview.border = alertPreview:CreateTexture(nil, "BORDER");
+alertPreview.border:SetPoint("TOPLEFT", -2, 2);
+alertPreview.border:SetPoint("BOTTOMRIGHT", 2, -2);
+alertPreview.border:SetColorTexture(0.3, 0.6, 1.0, 0.6);
+alertPreview.border:Hide();
+
+alertPreview.inner = alertPreview:CreateTexture(nil, "BORDER", nil, 1);
+alertPreview.inner:SetAllPoints();
+alertPreview.inner:SetColorTexture(0, 0, 0, 0);
+alertPreview.inner:Hide();
+
+alertPreview:SetScript("OnEnter", function(self)
+    self.highlight:Show();
+    self.border:Show();
+    self.inner:Show();
+    SetCursor("Interface\\CURSOR\\UI-Cursor-Move");
+end);
+
+alertPreview:SetScript("OnLeave", function(self)
+    if not self.isDragging then
+        self.highlight:Hide();
+        self.border:Hide();
+        self.inner:Hide();
+    end
+    SetCursor(nil);
+end);
+
+local UpdateAlertPreviewPosition;
+
+alertPreview:RegisterForDrag("LeftButton");
+
+alertPreview:SetScript("OnDragStart", function(self)
+    self.isDragging = true;
+    self.highlight:Show();
+    self.border:Show();
+    self.inner:Show();
+    self.dragStartLeft = self:GetLeft();
+    self.dragStartTop = self:GetTop();
+    self.dragStartOffsetX = db.alertOffsetX;
+    self.dragStartOffsetY = db.alertOffsetY;
+    self:StartMoving();
+end);
+
+alertPreview:SetScript("OnUpdate", function(self)
+    if self.isDragging then
+        local deltaX = self:GetLeft() - self.dragStartLeft;
+        local deltaY = self:GetTop() - self.dragStartTop;
+        db.alertOffsetX = self.dragStartOffsetX + deltaX;
+        db.alertOffsetY = self.dragStartOffsetY + deltaY;
+        UpdateAlertPosition();
+    end
+end);
+
+alertPreview:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing();
+    self.isDragging = false;
+
+    if not self:IsMouseOver() then
+        self.highlight:Hide();
+        self.border:Hide();
+        self.inner:Hide();
+    end
+
+    local deltaX = self:GetLeft() - self.dragStartLeft;
+    local deltaY = self:GetTop() - self.dragStartTop;
+    db.alertOffsetX = self.dragStartOffsetX + deltaX;
+    db.alertOffsetY = self.dragStartOffsetY + deltaY;
+
+    db.alertOffsetX = floor(db.alertOffsetX / 5 + 0.5) * 5;
+    db.alertOffsetY = floor(db.alertOffsetY / 5 + 0.5) * 5;
+
+    UpdateAlertPosition();
+    UpdateAlertPreviewPosition();
+end);
+
+UpdateAlertPreviewPosition = function()
+    if not db then return; end
+    alertPreview:ClearAllPoints();
+    alertPreview:SetPoint("TOP", UIParent, "TOP", db.alertOffsetX, db.alertOffsetY);
+end
+
+local function StartAlertDemo()
+    UpdateAlertPosition();
+    UpdateAlertPreviewPosition();
+    alertText:SetText("RepSync: Honor Hold");
+    alertStartTime = GetTime();
+    alertDemoMode = true;
+    alertFrame:SetAlpha(0);
+    alertFrame:Show();
+    alertPreview:Show();
+end
+
+local function StopAlertDemo()
+    alertDemoMode = false;
+    alertFrame:Hide();
+    alertPreview:Hide();
+end
 
 --------------------------------------------------------------------------------
 -- Utilities
@@ -479,6 +652,25 @@ local function ProcessZoneChange()
             return;
         end
 
+        -- Check if we should skip this faction
+        local _, _, standingID = GetFactionInfoByID(targetFactionID);
+        local skipReason = nil;
+        if standingID and standingID <= 2 then
+            skipReason = "Hostile";
+        elseif db.skipExalted and standingID and standingID == 8 then
+            skipReason = "Exalted";
+        elseif db.blacklist and db.blacklist[targetFactionID] then
+            skipReason = "Ignored";
+        end
+
+        if skipReason then
+            local factionName = GetFactionNameByID(targetFactionID) or tostring(targetFactionID);
+            Print("Skipping |cffffd200" .. factionName .. "|r (" .. skipReason .. ")");
+            lastProcessedTarget = targetFactionID;
+            lastProcessedTime = now;
+            return;
+        end
+
         local currentFactionID = GetCurrentWatchedFactionID();
         if currentFactionID == targetFactionID then
             lastProcessedTarget = targetFactionID;
@@ -493,7 +685,11 @@ local function ProcessZoneChange()
 
         if FindAndWatchFactionByID(targetFactionID) then
             local factionName = GetFactionNameByID(targetFactionID) or tostring(targetFactionID);
-            Print("Switched to |cffffd200" .. factionName .. "|r for " .. (contextLabel or ""));
+            if db.showAlert then
+                ShowAlert("RepSync: " .. factionName);
+            else
+                Print("Switched to |cffffd200" .. factionName .. "|r for " .. (contextLabel or ""));
+            end
         end
 
         lastProcessedTarget = targetFactionID;
@@ -506,7 +702,11 @@ local function ProcessZoneChange()
 
             if FindAndWatchFactionByID(previousID) then
                 local factionName = GetFactionNameByID(previousID) or tostring(previousID);
-                Print("Restored |cffffd200" .. factionName .. "|r");
+                if db.showAlert then
+                    ShowAlert("RepSync: " .. factionName);
+                else
+                    Print("Restored |cffffd200" .. factionName .. "|r");
+                end
             end
         end
 
@@ -539,11 +739,16 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end
         db = RepSyncDB;
+        if not db.blacklist then
+            db.blacklist = {};
+        end
+        UpdateAlertPosition();
 
         self:UnregisterEvent("ADDON_LOADED");
 
     elseif event == "PLAYER_LOGIN" then
         playerFaction = UnitFactionGroup("player");
+        RegisterSettings();
         C_Timer.After(1, ProcessZoneChange);
 
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -555,172 +760,161 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 end);
 
 --------------------------------------------------------------------------------
--- GUI: Widget Factories (matching MyDruid/HealerMana style)
+-- GUI: Options Panel (native Settings API, matching HealerMana style)
 --------------------------------------------------------------------------------
 
-local FrameBackdrop = {
-    bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-    tile = true, tileSize = 32, edgeSize = 32,
-    insets = { left = 8, right = 8, top = 8, bottom = 8 },
-};
+RegisterSettings = function()
+    local category, layout = Settings.RegisterVerticalLayoutCategory("RepSync");
 
-local function CreateCheckbox(parent, label, width)
-    local container = CreateFrame("Frame", nil, parent);
-    container:SetSize(width or 200, 24);
+    -- Helper: register a boolean proxy setting + checkbox
+    local function AddCheckbox(key, name, tooltip, onChange)
+        local setting = Settings.RegisterProxySetting(category,
+            "REPSYNC_" .. key:upper(), Settings.VarType.Boolean, name,
+            DEFAULT_SETTINGS[key],
+            function() return db[key]; end,
+            function(value)
+                db[key] = value;
+                if onChange then onChange(value); end
+            end);
+        return Settings.CreateCheckbox(category, setting, tooltip);
+    end
 
-    local checkbox = CreateFrame("CheckButton", nil, container, "UICheckButtonTemplate");
-    checkbox:SetPoint("LEFT");
-    checkbox:SetSize(24, 24);
+    -------------------------
+    -- Section: General
+    -------------------------
+    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("General"));
 
-    local labelText = container:CreateFontString(nil, "OVERLAY", "GameFontHighlight");
-    labelText:SetPoint("LEFT", checkbox, "RIGHT", 2, 0);
-    labelText:SetText(label);
+    AddCheckbox("enabled", "Enable Auto-Switching",
+        "Automatically switch your reputation bar when entering a mapped dungeon, raid, or city.");
 
-    checkbox:SetScript("OnClick", function(self)
-        PlaySound(self:GetChecked() and 856 or 857);
-        if container.OnValueChanged then
-            container:OnValueChanged(self:GetChecked());
+    AddCheckbox("restorePrevious", "Restore Previous Rep on Exit",
+        "When leaving a mapped instance, automatically switch back to the reputation you were tracking before.");
+
+    AddCheckbox("enableCities", "Switch in Cities & Sub-Zones",
+        "Switch reputation when entering capital cities (Stormwind, Orgrimmar, etc.) and faction sub-zones (Aldor Rise, Scryer's Tier).");
+
+    AddCheckbox("skipExalted", "Skip Exalted Factions",
+        "Don't switch reputation when you are already Exalted with the target faction.");
+
+    -------------------------
+    -- Section: Notifications
+    -------------------------
+    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Notifications"));
+
+    AddCheckbox("showAlert", "Show Alert on Screen",
+        "Show a zone-text style notification on screen when reputation is switched.",
+        function(value)
+            if value and settingsDemoActive then
+                StartAlertDemo();
+            else
+                StopAlertDemo();
+            end
+        end);
+
+    AddCheckbox("verbose", "Chat Messages",
+        "Print reputation switch messages to chat.");
+
+    Settings.RegisterAddOnCategory(category);
+    repSyncCategoryID = category:GetID();
+
+    -- Stop alert demo and restore strata when settings panel closes
+    if SettingsPanel then
+        SettingsPanel:HookScript("OnHide", function()
+            if settingsDemoActive then
+                StopAlertDemo();
+                settingsDemoActive = false;
+                alertFrame:SetFrameStrata("LOW");
+                alertPreview:SetFrameStrata("DIALOG");
+            end
+        end);
+    end
+end
+
+local function OpenOptions()
+    settingsDemoActive = true;
+    alertFrame:SetFrameStrata("TOOLTIP");
+    alertPreview:SetFrameStrata("TOOLTIP");
+    if db.showAlert then
+        StartAlertDemo();
+    end
+    Settings.OpenToCategory(repSyncCategoryID);
+end
+
+--------------------------------------------------------------------------------
+-- Blacklist (Ignore List)
+--------------------------------------------------------------------------------
+
+local function FindFactionByName(input)
+    if not input or input == "" then return nil; end
+    input = strlower(input);
+
+    -- Exact match first
+    for id, name in pairs(FACTION_NAMES) do
+        if strlower(name) == input then
+            return id, name;
         end
-    end);
-
-    container.checkbox = checkbox;
-    container.labelText = labelText;
-
-    function container:SetValue(value)
-        checkbox:SetChecked(value);
     end
 
-    function container:GetValue()
-        return checkbox:GetChecked();
+    -- Partial match (must be unambiguous)
+    local matchID, matchName;
+    local matchCount = 0;
+    for id, name in pairs(FACTION_NAMES) do
+        if strlower(name):find(input, 1, true) then
+            matchID = id;
+            matchName = name;
+            matchCount = matchCount + 1;
+        end
     end
 
-    return container;
+    if matchCount == 1 then
+        return matchID, matchName;
+    elseif matchCount > 1 then
+        return nil, nil, true; -- ambiguous
+    end
+
+    return nil;
 end
 
---------------------------------------------------------------------------------
--- GUI: Options Frame
---------------------------------------------------------------------------------
-
-local function CreateOptionsFrame()
-    if OptionsFrame then return OptionsFrame; end
-
-    local frame = CreateFrame("Frame", "RepSyncOptionsFrame", UIParent, "BackdropTemplate");
-    frame:SetSize(280, 192);
-    frame:SetPoint("CENTER");
-    frame:SetBackdrop(FrameBackdrop);
-    frame:SetBackdropColor(0, 0, 0, 1);
-    frame:SetMovable(true);
-    frame:EnableMouse(true);
-    frame:SetToplevel(true);
-    frame:SetFrameStrata("DIALOG");
-    frame:SetFrameLevel(100);
-    frame:Hide();
-
-    -- Title bar
-    local titleBg = frame:CreateTexture(nil, "OVERLAY");
-    titleBg:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header");
-    titleBg:SetTexCoord(0.31, 0.67, 0, 0.63);
-    titleBg:SetPoint("TOP", 0, 12);
-    titleBg:SetSize(180, 40);
-
-    local titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal");
-    titleText:SetPoint("TOP", titleBg, "TOP", 0, -14);
-    titleText:SetText("RepSync");
-
-    local titleBgL = frame:CreateTexture(nil, "OVERLAY");
-    titleBgL:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header");
-    titleBgL:SetTexCoord(0.21, 0.31, 0, 0.63);
-    titleBgL:SetPoint("RIGHT", titleBg, "LEFT");
-    titleBgL:SetSize(30, 40);
-
-    local titleBgR = frame:CreateTexture(nil, "OVERLAY");
-    titleBgR:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header");
-    titleBgR:SetTexCoord(0.67, 0.77, 0, 0.63);
-    titleBgR:SetPoint("LEFT", titleBg, "RIGHT");
-    titleBgR:SetSize(30, 40);
-
-    -- Title drag area
-    local titleArea = CreateFrame("Frame", nil, frame);
-    titleArea:SetAllPoints(titleBg);
-    titleArea:EnableMouse(true);
-    titleArea:SetScript("OnMouseDown", function() frame:StartMoving(); end);
-    titleArea:SetScript("OnMouseUp", function() frame:StopMovingOrSizing(); end);
-
-    -- Close button
-    local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton");
-    closeBtn:SetPoint("TOPRIGHT", -5, -5);
-
-    -- Content area
-    local content = CreateFrame("Frame", nil, frame);
-    content:SetPoint("TOPLEFT", 20, -40);
-    content:SetPoint("BOTTOMRIGHT", -20, 15);
-
-    local y = 0;
-
-    -- Enabled checkbox
-    local enabledCb = CreateCheckbox(content, "Enable auto-switching", 240);
-    enabledCb:SetPoint("TOPLEFT", 0, y);
-    enabledCb:SetValue(db.enabled);
-    enabledCb:EnableMouse(true);
-    enabledCb:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
-        GameTooltip:SetText("Enable Auto-Switching", 1, 1, 1);
-        GameTooltip:AddLine("Automatically switch your reputation bar when entering a mapped dungeon, raid, or city.", 1, 0.82, 0, true);
-        GameTooltip:Show();
-    end);
-    enabledCb:SetScript("OnLeave", function() GameTooltip:Hide(); end);
-    enabledCb.OnValueChanged = function(self, value)
-        db.enabled = value;
-    end;
-    y = y - 32;
-
-    -- Restore previous checkbox
-    local restoreCb = CreateCheckbox(content, "Restore previous rep on exit", 240);
-    restoreCb:SetPoint("TOPLEFT", 0, y);
-    restoreCb:SetValue(db.restorePrevious);
-    restoreCb:EnableMouse(true);
-    restoreCb:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
-        GameTooltip:SetText("Restore Previous", 1, 1, 1);
-        GameTooltip:AddLine("When leaving a mapped instance, automatically switch back to the reputation you were tracking before.", 1, 0.82, 0, true);
-        GameTooltip:Show();
-    end);
-    restoreCb:SetScript("OnLeave", function() GameTooltip:Hide(); end);
-    restoreCb.OnValueChanged = function(self, value)
-        db.restorePrevious = value;
-    end;
-    y = y - 32;
-
-    -- Enable cities checkbox
-    local citiesCb = CreateCheckbox(content, "Switch in cities & sub-zones", 240);
-    citiesCb:SetPoint("TOPLEFT", 0, y);
-    citiesCb:SetValue(db.enableCities);
-    citiesCb:EnableMouse(true);
-    citiesCb:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
-        GameTooltip:SetText("Cities & Sub-Zones", 1, 1, 1);
-        GameTooltip:AddLine("Switch reputation when entering capital cities (Stormwind, Orgrimmar, etc.) and faction sub-zones (Aldor Rise, Scryer's Tier).", 1, 0.82, 0, true);
-        GameTooltip:Show();
-    end);
-    citiesCb:SetScript("OnLeave", function() GameTooltip:Hide(); end);
-    citiesCb.OnValueChanged = function(self, value)
-        db.enableCities = value;
-    end;
-
-    -- ESC to close
-    tinsert(UISpecialFrames, "RepSyncOptionsFrame");
-
-    OptionsFrame = frame;
-    return frame;
+local function AddToBlacklist(input)
+    local id, name, ambiguous = FindFactionByName(input);
+    if ambiguous then
+        PrintAlways("Multiple factions match '" .. input .. "'. Be more specific.");
+        return;
+    end
+    if not id then
+        PrintAlways("No faction found matching '" .. input .. "'.");
+        return;
+    end
+    if not db.blacklist then db.blacklist = {}; end
+    db.blacklist[id] = true;
+    PrintAlways("Added |cffffd200" .. name .. "|r to ignore list.");
 end
 
-local function ToggleOptionsFrame()
-    local frame = CreateOptionsFrame();
-    if frame:IsShown() then
-        frame:Hide();
-    else
-        frame:Show();
+local function RemoveFromBlacklist(input)
+    local id, name, ambiguous = FindFactionByName(input);
+    if ambiguous then
+        PrintAlways("Multiple factions match '" .. input .. "'. Be more specific.");
+        return;
+    end
+    if not id then
+        PrintAlways("No faction found matching '" .. input .. "'.");
+        return;
+    end
+    if db.blacklist then
+        db.blacklist[id] = nil;
+    end
+    PrintAlways("Removed |cffffd200" .. name .. "|r from ignore list.");
+end
+
+local function ShowIgnoreList()
+    if not db.blacklist or not next(db.blacklist) then
+        PrintAlways("Ignore list is empty.");
+        return;
+    end
+    PrintAlways("Ignored factions:");
+    for id in pairs(db.blacklist) do
+        local name = FACTION_NAMES[id] or tostring(id);
+        PrintAlways("  |cffffd200" .. name .. "|r");
     end
 end
 
@@ -732,7 +926,10 @@ local function ShowHelp()
     PrintAlways("Commands:");
     PrintAlways("  |cffffd200/rs|r - Toggle options window");
     PrintAlways("  |cffffd200/rs clear|r - Clear saved previous faction");
-    PrintAlways("  |cffffd200/rs list|r - List all mapped instances in chat");
+    PrintAlways("  |cffffd200/rs list|r - List all mapped locations in chat");
+    PrintAlways("  |cffffd200/rs ignore <name>|r - Add faction to ignore list");
+    PrintAlways("  |cffffd200/rs unignore <name>|r - Remove faction from ignore list");
+    PrintAlways("  |cffffd200/rs ignorelist|r - Show ignored factions");
     PrintAlways("  |cffffd200/rs help|r - Show this help");
 end
 
@@ -800,14 +997,29 @@ local function SlashHandler(msg)
     msg = strtrim(msg or "");
     local cmd = msg:match("^(%S+)") or "";
     cmd = strlower(cmd);
+    local arg = strtrim(msg:match("^%S+%s+(.+)$") or "");
 
     if cmd == "" then
-        ToggleOptionsFrame();
+        OpenOptions();
     elseif cmd == "clear" then
         db.previousFactionID = nil;
         PrintAlways("Cleared saved previous faction");
     elseif cmd == "list" then
         ShowList();
+    elseif cmd == "ignore" then
+        if arg == "" then
+            ShowIgnoreList();
+        else
+            AddToBlacklist(arg);
+        end
+    elseif cmd == "unignore" then
+        if arg ~= "" then
+            RemoveFromBlacklist(arg);
+        else
+            PrintAlways("Usage: |cffffd200/rs unignore <faction name>|r");
+        end
+    elseif cmd == "ignorelist" then
+        ShowIgnoreList();
     elseif cmd == "help" then
         ShowHelp();
     else

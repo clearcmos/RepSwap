@@ -14,19 +14,25 @@ Built specifically for **TBC Classic Anniversary**.
 - **City support** - Switches to city faction rep when entering capital cities
 - **Sub-zone support** - Detects faction sub-zones like Aldor Rise, Scryer's Tier, and goblin towns
 - **Multi-language** - Sub-zone detection works in all 10 WoW client languages
-- **GUI options** - Toggle settings via `/rs`
+- **Skip exalted** - Optionally skip factions you're already Exalted with
+- **Ignore list** - Exclude specific factions from auto-switching
+- **Screen alerts** - Zone-text style notification with draggable positioning
+- **Native options** - Settings integrated in Options > AddOns > RepSync
 
 ---
 
 ## Usage
 
-Type `/rs` to open the options panel.
+Type `/rs` to open the options panel, or go to **Options > AddOns > RepSync**.
 
 ### Slash Commands
 
 - `/rs` - Open options panel
 - `/rs clear` - Clear saved previous faction
 - `/rs list` - List mapped locations in chat
+- `/rs ignore <name>` - Add faction to ignore list
+- `/rs unignore <name>` - Remove faction from ignore list
+- `/rs ignorelist` - Show ignored factions
 - `/rs help` - Show commands
 
 ---
@@ -36,6 +42,9 @@ Type `/rs` to open the options panel.
 - Enable/Disable auto-switching
 - Restore previous rep on exit
 - Enable/Disable city & sub-zone switching
+- Skip exalted factions
+- Show/hide screen alerts (draggable position)
+- Chat messages toggle
 
 ---
 

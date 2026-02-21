@@ -5,7 +5,7 @@
 **RepSync** is a WoW Classic Anniversary addon that automatically switches the player's watched reputation bar when entering dungeons, raids, capital cities, and faction sub-zones.
 
 ### Key Files
-- `RepSync.lua` - Main addon code (all logic in single file, ~700 lines)
+- `RepSync.lua` - Main addon code (all logic in single file, ~1030 lines)
 - `RepSync.toc` - Addon manifest
 - `README.md` - Documentation (also used for CurseForge description)
 - Deployed to: `/mnt/data/games/World of Warcraft/_anniversary_/Interface/AddOns/RepSync/`
@@ -19,7 +19,11 @@
 - Saves and restores previously watched reputation on exit (preserves original across multi-zone transitions)
 - Expand/collapse-safe faction index lookup (expands headers, finds faction, re-collapses)
 - Debounce logic to avoid redundant switches
-- GUI options panel (`/rs`) with three toggle checkboxes
+- Native Blizzard Settings API options panel (Options > AddOns > RepSync)
+- Skip exalted factions toggle
+- Faction ignore list (blacklist)
+- Zone-text style screen alerts with draggable positioning
+- Chat message toggle
 - SavedVariables: `RepSyncDB` (per-character)
 
 ### Architecture
@@ -34,9 +38,12 @@
 - `C_Reputation.GetWatchedFactionData()` to check current watched faction
 
 ### Slash Commands
-- `/rs` - Toggle GUI options window
+- `/rs` - Open native options panel (Options > AddOns > RepSync)
 - `/rs clear` - Clear saved previous faction
 - `/rs list` - List all mapped locations in chat
+- `/rs ignore <name>` - Add faction to ignore list
+- `/rs unignore <name>` - Remove faction from ignore list
+- `/rs ignorelist` - Show ignored factions
 - `/rs help` - Show commands
 
 ### Development Workflow

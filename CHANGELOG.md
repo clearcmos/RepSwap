@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.2] - 2026-02-21
+
+### Changed
+- Options panel now uses native Blizzard Settings API (Options > AddOns > RepSync)
+- `/rs` opens the native settings panel instead of a custom floating window
+- Alert demo preview renders above the settings panel for easy repositioning
+
+### Removed
+- Custom floating options dialog (replaced by native integration)
+
 ## [1.0.1] - 2026-02-18
 
 ### Added
